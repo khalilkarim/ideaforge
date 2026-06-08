@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IdeaForge</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <h1>⚒️ IdeaForge</h1>
+        <p>Discover app and tool ideas from real market pain points</p>
+    </div>
+
+    <div class="search-section">
+        <div class="search-bar">
+            <input
+                    type="text"
+                    id="topicInput"
+                    placeholder="Enter an industry or problem space (e.g. project management, healthcare, remote work)"
+            />
+            <button id="searchBtn" onclick="searchIdeas()">Generate Ideas</button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="loading hidden">
+        <p>🔍 Scraping Hacker News and generating ideas...</p>
+    </div>
+
+    <div id="resultsSection" class="hidden">
+        <div class="section-header">
+            <h2>Generated Ideas</h2>
+            <button onclick="saveIdeas()" class="save-btn">Save These Ideas</button>
+        </div>
+        <div id="results" class="results-box"></div>
+
+        <div class="refine-section">
+            <h3>🤔 Dig Deeper</h3>
+            <p>Paste an idea above and ask a follow up question</p>
+            <textarea id="ideaInput" placeholder="Paste an idea here..."></textarea>
+            <input type="text" id="questionInput" placeholder="Ask a follow up question..."/>
+            <button onclick="refineIdea()">Refine</button>
+            <div id="refineResult" class="results-box hidden"></div>
+        </div>
+    </div>
+
+    <!-- Saved Ideas Section -->
+    <div class="saved-section">
+        <div class="section-header">
+            <h2>💾 Saved Ideas</h2>
+            <button onclick="loadSavedIdeas()" class="refresh-btn">Refresh</button>
+        </div>
+        <div id="savedIdeas"></div>
+    </div>
+
+</div>
+
+<script>
+    let currentTopic = "";
+    let currentIdeas = "";
+
+    async function searchIdeas() {
+        const topic = document.getElementById("topicInput").value.trim();
+        if (!topic) {
+            alert("Please enter a topic");
+            return;
+        }
+
+        currentTopic = topic;
+        showLoading(true);
+        hideElement("resultsSection");
+
+        try {
+            const response = await fetch("/search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ topic })
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            currentIdeas = data.ideas;
+            document.getElementById("results").innerText = data.ideas;
+            showElement("resultsSection");
+
+        } catch (error) {
+            alert("Something went wrong. Please try again.");
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function refineIdea() {
+        const idea = document.getElementById("ideaInput").value.trim();
+        const question = document.getElementById("questionInput").value.trim();
+
+        if (!idea || !question) {
+            alert("Please paste an idea and enter a question");
+            return;
+        }
+
+        try {
+            const response = await fetch("/refine", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ idea, question })
+            });
+
+            const data = await response.json();
+            const refineResult = document.getElementById("refineResult");
+            refineResult.innerText = data.response;
+            showElement("refineResult");
+
+        } catch (error) {
+            alert("Something went wrong. Please try again.");
+        }
+    }
+
+    async function saveIdeas() {
+        if (!currentTopic || !currentIdeas) {
+            alert("No ideas to save");
+            return;
+        }
+
+        try {
+            await fetch("/ideas", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    topic: currentTopic,
+                    idea: currentIdeas
+                })
+            });
+
+            alert("Ideas saved successfully");
+            loadSavedIdeas();
+
+        } catch (error) {
+            alert("Could not save ideas");
+        }
+    }
+
+    async function loadSavedIdeas() {
+        try {
+            const response = await fetch("/ideas");
+            const ideas = await response.json();
+            const container = document.getElementById("savedIdeas");
+
+            if (ideas.length === 0) {
+                container.innerHTML = "<p class='empty'>No saved ideas yet</p>";
+                return;
+            }
+
+            container.innerHTML = ideas.map(idea => `
+                    <div class="saved-card">
+                        <div class="saved-header">
+                            <span class="topic-tag">${idea.topic}</span>
+                            <span class="date">${new Date(idea.created_at).toLocaleDateString()}</span>
+                            <button onclick="deleteIdea(${idea.id})" class="delete-btn">Delete</button>
+                        </div>
+                        <pre class="saved-content">${idea.idea}</pre>
+                    </div>
+                `).join("");
+
+        } catch (error) {
+            alert("Could not load saved ideas");
+        }
+    }
+
+    async function deleteIdea(id) {
+        try {
+            await fetch(`/ideas/${id}`, { method: "DELETE" });
+            loadSavedIdeas();
+        } catch (error) {
+            alert("Could not delete idea");
+        }
+    }
+
+    function showLoading(show) {
+        const loading = document.getElementById("loading");
+        show ? showElement("loading") : hideElement("loading");
+    }
+
+    function showElement(id) {
+        document.getElementById(id).classList.remove("hidden");
+    }
+
+    function hideElement(id) {
+        document.getElementById(id).classList.add("hidden");
+    }
+
+    loadSavedIdeas();
+</script>
+
+</body>
+</html>
+
